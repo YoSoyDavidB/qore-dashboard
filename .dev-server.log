@@ -1,0 +1,13 @@
+npm warn Unknown user config "always-auth". This will stop working in the next major version of npm.
+
+> mission-control@0.1.0 dev
+> next dev -H 0.0.0.0
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+- Environments: .env.local
+
+✓ Starting...
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+✓ Ready in 497ms

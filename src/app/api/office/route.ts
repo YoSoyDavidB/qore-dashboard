@@ -1,228 +1,77 @@
 import { NextResponse } from "next/server";
-import { readFileSync, statSync, readdirSync } from "fs";
+import { readdirSync, statSync } from "fs";
 import { join } from "path";
+import { AGENTS } from "@/components/Office3D/agentsConfig";
 
 export const dynamic = "force-dynamic";
 
-const AGENT_CONFIG = {
-  main: { emoji: "🦞", color: "#ff6b35", name: "Tenacitas", role: "Boss" },
-  academic: {
-    emoji: "🎓",
-    color: "#4ade80",
-    name: "Profe",
-    role: "Teacher",
-  },
-  infra: {
-    emoji: "🔧",
-    color: "#f97316",
-    name: "Infra",
-    role: "DevOps",
-  },
-  studio: {
-    emoji: "🎬",
-    color: "#a855f7",
-    name: "Studio",
-    role: "Video Editor",
-  },
-  social: {
-    emoji: "📱",
-    color: "#ec4899",
-    name: "Social",
-    role: "Social Media",
-  },
-  linkedin: {
-    emoji: "💼",
-    color: "#0077b5",
-    name: "LinkedIn Pro",
-    role: "Professional",
-  },
-  devclaw: {
-    emoji: "👨‍💻",
-    color: "#8b5cf6",
-    name: "DevClaw",
-    role: "Developer",
-  },
-  freelance: {
-    emoji: "👨‍💻",
-    color: "#8b5cf6",
-    name: "DevClaw",
-    role: "Developer",
-  },
-};
+const OPENCLAW_DIR = process.env.OPENCLAW_DIR ?? "/openclaw";
 
-interface AgentSession {
-  agentId: string;
-  sessionId: string;
-  label?: string;
-  lastActivity?: string;
-  createdAt?: string;
-}
+function getMostRecentMtime(dirPath: string): number {
+  let mostRecent = 0;
+  const skipDirs = new Set(["node_modules", ".git", ".pnpm", ".next", "dist"]);
 
-async function getAgentStatusFromGateway(): Promise<
-  Record<string, { isActive: boolean; currentTask: string; lastSeen: number }>
-> {
-  try {
-    const configPath = (process.env.OPENCLAW_DIR || "/root/.openclaw") + "/openclaw.json";
-    const config = JSON.parse(readFileSync(configPath, "utf-8"));
-    const gatewayToken = config.gateway?.auth?.token;
-
-    if (!gatewayToken) {
-      console.warn("No gateway token found");
-      return {};
-    }
-
-    // Try to fetch sessions from gateway
-    const response = await fetch("http://localhost:18789/api/sessions", {
-      headers: {
-        Authorization: `Bearer ${gatewayToken}`,
-      },
-      signal: AbortSignal.timeout(2000), // 2s timeout
-    });
-
-    if (!response.ok) {
-      console.warn("Gateway returned non-OK status:", response.status);
-      return {};
-    }
-
-    // Verify Content-Type before parsing JSON
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      console.warn("Gateway returned non-JSON response:", contentType);
-      return {};
-    }
-
-    const sessions = (await response.json()) as AgentSession[];
-    const agentStatus: Record<
-      string,
-      { isActive: boolean; currentTask: string; lastSeen: number }
-    > = {};
-
-    for (const session of sessions) {
-      if (!session.agentId) continue;
-
-      const lastActivity = session.lastActivity
-        ? new Date(session.lastActivity).getTime()
-        : 0;
-      const now = Date.now();
-      const minutesAgo = (now - lastActivity) / 1000 / 60;
-
-      let status = "SLEEPING";
-      let currentTask = "zzZ...";
-
-      if (minutesAgo < 5) {
-        status = "ACTIVE";
-        currentTask = session.label || "Working on task...";
-      } else if (minutesAgo < 30) {
-        status = "IDLE";
-        currentTask = session.label || "Idle...";
+  function walk(p: string, depth: number) {
+    if (depth > 4) return;
+    try {
+      const entries = readdirSync(p, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          if (!skipDirs.has(entry.name)) walk(join(p, entry.name), depth + 1);
+        } else {
+          try {
+            const mtime = statSync(join(p, entry.name)).mtimeMs;
+            if (mtime > mostRecent) mostRecent = mtime;
+          } catch { /* skip */ }
+        }
       }
-
-      // Keep most recent activity per agent
-      if (
-        !agentStatus[session.agentId] ||
-        lastActivity > agentStatus[session.agentId].lastSeen
-      ) {
-        agentStatus[session.agentId] = {
-          isActive: status === "ACTIVE",
-          currentTask: `${status}: ${currentTask}`,
-          lastSeen: lastActivity,
-        };
-      }
-    }
-
-    return agentStatus;
-  } catch (error) {
-    console.warn("Failed to fetch from gateway:", error);
-    return {};
+    } catch { /* skip unreadable dirs */ }
   }
+
+  walk(dirPath, 0);
+  return mostRecent;
 }
 
-function getAgentStatusFromFiles(
-  agentId: string,
-  workspace: string
-): { isActive: boolean; currentTask: string; lastSeen: number } {
+function getAgentStatus(agentId: string): {
+  status: "idle" | "working" | "thinking" | "error";
+  currentTask: string;
+  lastSeenMins: number;
+} {
+  const wsName = agentId === "main" ? "workspace" : `workspace-${agentId}`;
+  const wsPath = join(OPENCLAW_DIR, wsName);
+
   try {
-    const today = new Date().toISOString().split("T")[0];
-    const memoryFile = join(workspace, "memory", `${today}.md`);
+    const mtimeMs = getMostRecentMtime(wsPath);
+    if (!mtimeMs) return { status: "idle", currentTask: "No activity", lastSeenMins: 9999 };
 
-    // Check if file exists
-    const stat = statSync(memoryFile);
-    const lastSeen = stat.mtime.getTime();
-    const minutesSinceUpdate = (Date.now() - lastSeen) / 1000 / 60;
+    const minutesAgo = (Date.now() - mtimeMs) / 1000 / 60;
 
-    const content = readFileSync(memoryFile, "utf-8");
-    const lines = content.trim().split("\n").filter((l) => l.trim());
-
-    let currentTask = "Idle...";
-    if (lines.length > 0) {
-      // Get last meaningful line (skip timestamps)
-      const lastLine = lines
-        .slice(-10)
-        .reverse()
-        .find((l) => l.length > 20 && !l.match(/^#+\s/));
-
-      if (lastLine) {
-        currentTask = lastLine.replace(/^[-*]\s*/, "").slice(0, 100);
-        if (lastLine.length > 100) currentTask += "...";
-      }
-    }
-
-    // Determine status based on file modification time
-    if (minutesSinceUpdate < 5) {
-      return { isActive: true, currentTask: `ACTIVE: ${currentTask}`, lastSeen };
-    } else if (minutesSinceUpdate < 30) {
-      return { isActive: false, currentTask: `IDLE: ${currentTask}`, lastSeen };
+    if (minutesAgo < 3) {
+      return { status: "working", currentTask: "Executing task...", lastSeenMins: minutesAgo };
+    } else if (minutesAgo < 15) {
+      return { status: "thinking", currentTask: "Processing...", lastSeenMins: minutesAgo };
     } else {
-      return { isActive: false, currentTask: "SLEEPING: zzZ...", lastSeen };
+      return { status: "idle", currentTask: "Waiting for tasks", lastSeenMins: minutesAgo };
     }
-  } catch (error) {
-    // No memory file or error reading
-    return { isActive: false, currentTask: "SLEEPING: zzZ...", lastSeen: 0 };
+  } catch {
+    return { status: "idle", currentTask: "Offline", lastSeenMins: 9999 };
   }
 }
 
 export async function GET() {
-  try {
-    const configPath = (process.env.OPENCLAW_DIR || "/root/.openclaw") + "/openclaw.json";
-    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+  const agents = AGENTS.map((agent) => {
+    const { status, currentTask, lastSeenMins } = getAgentStatus(agent.id);
+    return {
+      id: agent.id,
+      name: agent.name,
+      emoji: agent.emoji,
+      color: agent.color,
+      role: agent.role,
+      status,
+      currentTask,
+      lastSeenMins: Math.round(lastSeenMins),
+    };
+  });
 
-    // Try gateway first, fallback to file-based
-    const gatewayStatus = await getAgentStatusFromGateway();
-
-    const agents = config.agents.list.map((agent: any) => {
-      const agentInfo = AGENT_CONFIG[agent.id as keyof typeof AGENT_CONFIG] || {
-        emoji: "🤖",
-        color: "#666",
-        name: agent.name || agent.id,
-        role: "Agent",
-      };
-
-      // Get status from gateway, or fallback to files
-      let status = gatewayStatus[agent.id];
-      if (!status) {
-        status = getAgentStatusFromFiles(agent.id, agent.workspace);
-      }
-
-      // Map freelance -> devclaw for canvas compatibility
-      const canvasId = agent.id === "freelance" ? "devclaw" : agent.id;
-
-      return {
-        id: canvasId,
-        name: agentInfo.name,
-        emoji: agentInfo.emoji,
-        color: agentInfo.color,
-        role: agentInfo.role,
-        currentTask: status.currentTask,
-        isActive: status.isActive,
-      };
-    });
-
-    return NextResponse.json({ agents });
-  } catch (error) {
-    console.error("Error getting office data:", error);
-    return NextResponse.json(
-      { error: "Failed to load office data" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ agents, updatedAt: new Date().toISOString() });
 }

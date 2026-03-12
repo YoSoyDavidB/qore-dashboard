@@ -37,17 +37,33 @@ export default function Office3D() {
   const [controlMode, setControlMode] = useState<'orbit' | 'fps'>('orbit');
   const [avatarPositions, setAvatarPositions] = useState<Map<string, any>>(new Map());
   
-  // Mock data - TODO: Replace with real OpenClaw API data
-  const [agentStates] = useState<Record<string, AgentState>>({
-    main:     { id: 'main',     status: 'working',  currentTask: 'Routing tasks',        model: 'opus',   tokensPerHour: 12000, tasksInQueue: 2, uptime: 15 },
-    argus:    { id: 'argus',    status: 'working',  currentTask: 'Analyzing requirements', model: 'sonnet', tokensPerHour: 5000,  tasksInQueue: 1, uptime: 8  },
-    atlas:    { id: 'atlas',    status: 'idle',     model: 'opus',   tokensPerHour: 0,    tasksInQueue: 0, uptime: 10 },
-    cipher:   { id: 'cipher',   status: 'thinking', currentTask: 'Security review',       model: 'sonnet', tokensPerHour: 3000,  tasksInQueue: 1, uptime: 6  },
-    hestia:   { id: 'hestia',   status: 'idle',     model: 'haiku',  tokensPerHour: 0,    tasksInQueue: 0, uptime: 12 },
-    nova:     { id: 'nova',     status: 'idle',     model: 'sonnet', tokensPerHour: 0,    tasksInQueue: 0, uptime: 7  },
-    sentinel: { id: 'sentinel', status: 'idle',     model: 'haiku',  tokensPerHour: 0,    tasksInQueue: 0, uptime: 9  },
-    iris:     { id: 'iris',     status: 'idle',     model: 'sonnet', tokensPerHour: 0,    tasksInQueue: 0, uptime: 5  },
-  });
+  // Real-time agent states from OpenClaw
+  const [agentStates, setAgentStates] = useState<Record<string, AgentState>>(() =>
+    Object.fromEntries(AGENTS.map((a) => [a.id, { id: a.id, status: "idle" as const }]))
+  );
+
+  useEffect(() => {
+    async function fetchStates() {
+      try {
+        const res = await fetch("/api/office");
+        if (!res.ok) return;
+        const data = await res.json();
+        const stateMap: Record<string, AgentState> = {};
+        for (const agent of data.agents ?? []) {
+          stateMap[agent.id] = {
+            id: agent.id,
+            status: agent.status ?? "idle",
+            currentTask: agent.currentTask,
+          };
+        }
+        setAgentStates(stateMap);
+      } catch { /* keep existing states on error */ }
+    }
+
+    fetchStates();
+    const interval = setInterval(fetchStates, 10_000); // poll every 10s
+    return () => clearInterval(interval);
+  }, []);
 
   const handleDeskClick = (agentId: string) => {
     setSelectedAgent(agentId);
