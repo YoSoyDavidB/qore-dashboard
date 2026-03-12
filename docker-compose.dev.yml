@@ -8,7 +8,17 @@ services:
       - .env.local
     environment:
       - OPENCLAW_DIR=/openclaw
+      - PANTHEON_DIR=/pantheon
+      - OPENCLAW_BRIDGE=http://host.docker.internal:18790
     volumes:
       - C:/Users/gusta/.openclaw:/openclaw:ro
+      - type: bind
+        source: "E:/obsidian/David's Notes/Project/Pantheon"
+        target: /pantheon
+        read_only: true
+      - type: bind
+        source: "C:/Users/gusta/qore-paintings"
+        target: /app/public/paintings
+        read_only: true
     extra_hosts:
       - "host.docker.internal:host-gateway"

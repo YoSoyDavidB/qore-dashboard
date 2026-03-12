@@ -16,6 +16,7 @@ import Whiteboard from './Whiteboard';
 import CoffeeMachine from './CoffeeMachine';
 import PlantPot from './PlantPot';
 import WallClock from './WallClock';
+import Painting from './Painting';
 import FirstPersonControls from './FirstPersonControls';
 import MovingAvatar from './MovingAvatar';
 
@@ -189,6 +190,43 @@ export default function Office3D() {
             rotation={[0, 0, 0]}
           />
 
+          {/* ── Paintings ─────────────────────────────────────────────
+              Drop any image file into C:\Users\gusta\qore-paintings\
+              e.g. qore-paintings\art1.jpg  →  imageUrl="/paintings/art1.jpg"
+              No Docker rebuild needed — folder is mounted as a volume.
+          ──────────────────────────────────────────────────────────── */}
+
+          {/* Left wall — abstract art */}
+          <Painting
+            position={[-14.85, 3.5, -2]}
+            rotation={[0, Math.PI / 2, 0]}
+            imageUrl="/paintings/art1.jpg"
+            width={2.4}
+            height={1.6}
+            frameColor="#C9A84C"
+            label="NEXUS"
+          />
+
+          {/* Right wall — photography / landscape */}
+          <Painting
+            position={[14.85, 3.5, -2]}
+            rotation={[0, -Math.PI / 2, 0]}
+            imageUrl="/paintings/art2.jpg"
+            width={2.4}
+            height={1.6}
+            frameColor="#4a5568"
+          />
+
+          {/* Back wall left — smaller piece next to Qualitas logo */}
+          <Painting
+            position={[-7, 4.2, -9.85]}
+            rotation={[0, 0, 0]}
+            imageUrl="/paintings/art3.jpg"
+            width={1.8}
+            height={1.2}
+            frameColor="#C9A84C"
+          />
+
           {/* Controles de cámara */}
           {controlMode === 'orbit' ? (
             <OrbitControls
@@ -310,7 +348,7 @@ export default function Office3D() {
 
       {/* Controles UI overlay */}
       <div className="absolute top-4 left-4 bg-black/70 text-white p-4 rounded-lg backdrop-blur-sm">
-        <h2 className="text-lg font-bold mb-2">🏢 The Office</h2>
+        <h2 className="text-lg font-bold mb-2">⚡ PANTHEON</h2>
         <div className="text-sm space-y-1 mb-3">
           <p><strong>Mode: {controlMode === 'orbit' ? '🖱️ Orbit' : '🎮 FPS'}</strong></p>
           {controlMode === 'orbit' ? (
@@ -365,7 +403,7 @@ export default function Office3D() {
       {isAdmin && !showChat && (
         <button
           onClick={() => setShowChat(true)}
-          className="fixed bottom-4 right-4 p-3 rounded-full shadow-lg z-50"
+          className="fixed bottom-4 left-4 p-3 rounded-full shadow-lg z-50"
           style={{ backgroundColor: "#C9A84C" }}
           title="Abrir chat con HERMES"
         >

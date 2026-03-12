@@ -25,158 +25,135 @@ interface MovingAvatarProps {
   onPositionUpdate: (id: string, pos: Vector3) => void;
 }
 
-export default function MovingAvatar({ 
-  agent, 
-  state, 
-  officeBounds, 
-  obstacles, 
+export default function MovingAvatar({
+  agent,
+  state,
+  officeBounds,
+  obstacles,
   otherAvatarPositions,
-  onPositionUpdate 
+  onPositionUpdate,
 }: MovingAvatarProps) {
   const groupRef = useRef<Group>(null);
-  
-  // Posición inicial completamente aleatoria SIN colisiones
+
+  // The agent's desk position — avatar walks here when active
+  const deskPos = new Vector3(agent.position[0], 0.6, agent.position[2]);
+
+  const isActive = state.status === 'working' || state.status === 'thinking';
+
+  // Random spawn position avoiding obstacles
   const [initialPos] = useState(() => {
     let pos: Vector3;
     let attempts = 0;
-    const minDistanceToObstacle = 1.5;
-
-    // Intentar hasta 50 veces encontrar una posición sin colisión
     do {
       const x = Math.random() * (officeBounds.maxX - officeBounds.minX - 2) + officeBounds.minX + 1;
       const z = Math.random() * (officeBounds.maxZ - officeBounds.minZ - 2) + officeBounds.minZ + 1;
       pos = new Vector3(x, 0.6, z);
-
-      // Verificar colisión con obstáculos
       let isFree = true;
-      for (const obstacle of obstacles) {
-        const distance = pos.distanceTo(obstacle.position);
-        if (distance < obstacle.radius + minDistanceToObstacle) {
-          isFree = false;
-          break;
-        }
+      for (const obs of obstacles) {
+        if (pos.distanceTo(obs.position) < obs.radius + 1.5) { isFree = false; break; }
       }
-
       if (isFree) break;
-      attempts++;
-    } while (attempts < 50);
-
+    } while (++attempts < 50);
     return pos;
   });
 
-  const [targetPos, setTargetPos] = useState(initialPos);
+  const [targetPos, setTargetPos] = useState(initialPos.clone());
   const currentPos = useRef(initialPos.clone());
-  
-  // Notificar posición inicial
+  const atDesk = useRef(false);
+
+  // Notify initial position
   useEffect(() => {
     onPositionUpdate(agent.id, initialPos.clone());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Verificar si una posición está libre (sin colisiones)
   const isPositionFree = (pos: Vector3): boolean => {
-    const minDistanceToObstacle = 1.5; // distancia mínima a muebles
-    const minDistanceToAvatar = 1.2; // distancia mínima entre avatares
-
-    // Verificar colisión con obstáculos
-    for (const obstacle of obstacles) {
-      const distance = pos.distanceTo(obstacle.position);
-      if (distance < obstacle.radius + minDistanceToObstacle) {
-        return false;
-      }
+    for (const obs of obstacles) {
+      if (pos.distanceTo(obs.position) < obs.radius + 1.5) return false;
     }
-
-    // Verificar colisión con otros avatares
     for (const [otherId, otherPos] of otherAvatarPositions.entries()) {
       if (otherId === agent.id) continue;
-      const distance = pos.distanceTo(otherPos);
-      if (distance < minDistanceToAvatar) {
-        return false;
-      }
+      if (pos.distanceTo(otherPos) < 1.2) return false;
     }
-
     return true;
   };
 
-  // Cambiar objetivo cada 5-10 segundos (depende del estado)
+  // When status changes → update target
   useEffect(() => {
-    const getNewTarget = () => {
-      let attempts = 0;
-      let newPos: Vector3;
-
-      // Intentar encontrar una posición libre (máximo 20 intentos)
-      do {
-        const x = Math.random() * (officeBounds.maxX - officeBounds.minX) + officeBounds.minX;
-        const z = Math.random() * (officeBounds.maxZ - officeBounds.minZ) + officeBounds.minZ;
-        newPos = new Vector3(x, 0.6, z);
-        attempts++;
-      } while (!isPositionFree(newPos) && attempts < 20);
-
-      if (attempts < 20) {
-        setTargetPos(newPos);
-      }
-    };
-
-    // Idle: moverse más frecuentemente
-    // Working: moverse menos
-    // Thinking: moverse muy poco
-    // Error: quedarse quieto
-    const getInterval = () => {
-      switch (state.status) {
-        case 'idle':
-          return 3000 + Math.random() * 3000; // 3-6s
-        case 'working':
-          return 8000 + Math.random() * 7000; // 8-15s
-        case 'thinking':
-          return 15000 + Math.random() * 10000; // 15-25s
-        case 'error':
-          return 30000; // casi quieto
-        default:
-          return 10000;
-      }
-    };
-
-    // Primer objetivo después de montar
-    const timeout = setTimeout(getNewTarget, 1000);
-    const interval = setInterval(getNewTarget, getInterval());
-    
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
+    if (isActive) {
+      // Go straight to desk
+      atDesk.current = false;
+      setTargetPos(deskPos.clone());
+    } else {
+      // Resume wandering — pick first random target
+      atDesk.current = false;
+      pickRandomTarget();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
-  // Mover suavemente hacia el objetivo
-  useFrame((frameState, delta) => {
-    if (!groupRef.current) return;
-
-    const speed = state.status === 'idle' ? 1.5 : 0.8; // idle se mueve más rápido
-    const moveSpeed = delta * speed;
-
-    // Calcular nueva posición
-    const newPos = currentPos.current.clone().lerp(targetPos, moveSpeed);
-
-    // Verificar si la nueva posición es válida
-    if (isPositionFree(newPos)) {
-      currentPos.current.copy(newPos);
-      groupRef.current.position.copy(currentPos.current);
-
-      // Notificar la nueva posición
-      onPositionUpdate(agent.id, currentPos.current.clone());
-
-      // Rotar hacia la dirección del movimiento
-      const direction = new Vector3().subVectors(targetPos, currentPos.current);
-      if (direction.length() > 0.1) {
-        const angle = Math.atan2(direction.x, direction.z);
-        groupRef.current.rotation.y = angle;
-      }
-    } else {
-      // Si hay colisión, buscar nuevo objetivo
+  const pickRandomTarget = () => {
+    let attempts = 0;
+    do {
       const x = Math.random() * (officeBounds.maxX - officeBounds.minX) + officeBounds.minX;
       const z = Math.random() * (officeBounds.maxZ - officeBounds.minZ) + officeBounds.minZ;
-      const newTarget = new Vector3(x, 0.6, z);
-      if (isPositionFree(newTarget)) {
-        setTargetPos(newTarget);
+      const pos = new Vector3(x, 0.6, z);
+      if (isPositionFree(pos)) { setTargetPos(pos); return; }
+    } while (++attempts < 20);
+  };
+
+  // Idle wandering interval
+  useEffect(() => {
+    if (isActive) return; // desk logic handles this
+
+    const getInterval = () => {
+      switch (state.status) {
+        case 'idle':   return 3000 + Math.random() * 3000;   // 3–6 s
+        case 'error':  return 30000;
+        default:       return 10000;
       }
+    };
+
+    const timeout = setTimeout(pickRandomTarget, 1000);
+    const interval = setInterval(pickRandomTarget, getInterval());
+    return () => { clearTimeout(timeout); clearInterval(interval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+
+    // When active and already at desk — just bob/stay, no movement
+    if (isActive && atDesk.current) {
+      // Subtle idle bob at desk
+      groupRef.current.position.y = 0.6 + Math.sin(Date.now() * 0.002) * 0.03;
+      return;
+    }
+
+    const speed = isActive ? 3.0 : (state.status === 'idle' ? 1.5 : 0.8);
+    const newPos = currentPos.current.clone().lerp(targetPos, delta * speed);
+
+    if (isPositionFree(newPos) || isActive /* allow reaching desk even if crowded */) {
+      currentPos.current.copy(newPos);
+      groupRef.current.position.set(newPos.x, newPos.y, newPos.z);
+      onPositionUpdate(agent.id, currentPos.current.clone());
+
+      // Face direction of movement
+      const dir = new Vector3().subVectors(targetPos, currentPos.current);
+      if (dir.length() > 0.05) {
+        groupRef.current.rotation.y = Math.atan2(dir.x, dir.z);
+      }
+
+      // Check if reached desk
+      if (isActive && currentPos.current.distanceTo(deskPos) < 0.3) {
+        atDesk.current = true;
+        currentPos.current.copy(deskPos);
+        groupRef.current.position.set(deskPos.x, deskPos.y, deskPos.z);
+        // Face the monitor (towards negative Z = back wall)
+        groupRef.current.rotation.y = Math.PI;
+      }
+    } else {
+      pickRandomTarget();
     }
   });
 
