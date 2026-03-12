@@ -2,9 +2,10 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Terminal, Lock, AlertCircle } from "lucide-react";
+import { Lock, AlertCircle, User } from "lucide-react";
 
 function LoginForm() {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,96 +16,67 @@ function LoginForm() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
-
       const data = await res.json();
-
       if (data.success) {
-        const from = searchParams.get("from") || "/";
+        const from = searchParams.get("from") || "/office";
         router.push(from);
         router.refresh();
+      } else if (res.status === 429) {
+        setError("Demasiados intentos. Intenta en 15 minutos.");
       } else {
-        setError("Contraseña incorrecta");
+        setError("Usuario o contrase\u00f1a incorrectos");
       }
     } catch {
-      setError("Error de conexión");
+      setError("Error de conexi\u00f3n");
     }
-
     setLoading(false);
   };
 
   return (
-    <div 
-      className="rounded-xl p-10"
-      style={{
-        backgroundColor: 'var(--card)',
-        border: '1px solid var(--border)',
-      }}
-    >
-      {/* Header */}
-      <div className="text-center mb-6 flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2.5">
-          <Terminal 
-            className="w-7 h-7" 
-            style={{ color: 'var(--accent)' }} 
-          />
-          <span className="text-2xl">🦞</span>
-          <h1 
-            className="text-xl font-bold"
-            style={{ 
-              fontFamily: 'var(--font-heading)',
-              color: 'var(--text-primary)',
-              letterSpacing: '-0.5px'
-            }}
-          >
-            Mission Control
-          </h1>
-        </div>
-        <p 
-          className="text-sm"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          Introduce la contraseña para acceder
-        </p>
+    <div className="rounded-2xl p-10 bg-zinc-900 border border-zinc-800">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: "#C9A84C" }}>
+          QORE
+        </h1>
+        <p className="text-zinc-500 text-sm mt-1">by Qualitas Funds</p>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="relative">
-          <Lock 
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px]" 
-            style={{ color: 'var(--text-muted)' }}
+          <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-[#C9A84C]"
+            placeholder="Usuario"
+            autoComplete="username"
+            required
           />
+        </div>
+
+        <div className="relative">
+          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 rounded-lg text-sm"
-            style={{
-              backgroundColor: 'var(--card-elevated)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-primary)',
-            }}
-            placeholder="Contraseña"
+            className="w-full pl-11 pr-4 py-3 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-[#C9A84C]"
+            placeholder="Contrase\u00f1a"
+            autoComplete="current-password"
             required
           />
         </div>
 
         {error && (
-          <div 
-            className="flex items-center gap-2 text-sm px-4 py-3 rounded-lg"
-            style={{
-              backgroundColor: 'var(--error-bg)',
-              color: 'var(--error)',
-            }}
-          >
-            <AlertCircle className="w-4 h-4" />
+          <div className="flex items-center gap-2 text-sm px-4 py-3 rounded-lg bg-red-900/20 text-red-400">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
         )}
@@ -112,47 +84,21 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full font-semibold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
-          style={{
-            backgroundColor: 'var(--accent)',
-            color: 'white',
-          }}
+          className="w-full font-semibold py-3 px-4 rounded-lg transition-opacity disabled:opacity-50"
+          style={{ backgroundColor: "#C9A84C", color: "#0A0A0A" }}
         >
           {loading ? "Verificando..." : "Entrar"}
         </button>
       </form>
-
-      {/* Footer */}
-      <p 
-        className="text-center text-xs mt-6"
-        style={{ color: 'var(--text-muted)' }}
-      >
-        Tenacitas Agent Dashboard
-      </p>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div 
-      className="min-h-screen flex items-center justify-center p-4 -ml-64"
-      style={{ backgroundColor: 'var(--background)' }}
-    >
-      <div className="w-full max-w-md">
-        <Suspense fallback={
-          <div 
-            className="rounded-xl p-10 animate-pulse"
-            style={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            <div className="h-8 bg-gray-700 rounded mb-4" />
-            <div className="h-12 bg-gray-700 rounded mb-4" />
-            <div className="h-10 bg-gray-700 rounded" />
-          </div>
-        }>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0A0A0A]">
+      <div className="w-full max-w-sm">
+        <Suspense fallback={<div className="rounded-2xl p-10 bg-zinc-900 animate-pulse h-80" />}>
           <LoginForm />
         </Suspense>
       </div>

@@ -1,8 +1,8 @@
-import Office3D from '@/components/Office3D/Office3D';
+import Office3D from "@/components/Office3D/Office3D";
 
 export const metadata = {
-  title: 'The Office 3D | Mission Control',
-  description: 'Visualiza tus agentes trabajando en tiempo real en un entorno 3D',
+  title: "QORE by Qualitas",
+  description: "Qualitas Funds AI agent control room",
 };
 
 export default function OfficePage() {

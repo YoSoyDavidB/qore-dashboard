@@ -1,0 +1,17 @@
+services:
+  qore:
+    build: .
+    container_name: qore-dashboard
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - nginx-proxy
+
+networks:
+  nginx-proxy:
+    external: true

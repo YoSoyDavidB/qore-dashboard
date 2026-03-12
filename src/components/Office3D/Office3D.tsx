@@ -19,8 +19,20 @@ import WallClock from './WallClock';
 import FirstPersonControls from './FirstPersonControls';
 import MovingAvatar from './MovingAvatar';
 
+import { useEffect, useState as useStateRole } from 'react';
+import { ChatPanel } from '@/components/ChatPanel';
+
 export default function Office3D() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useStateRole(false);
+  const [showChat, setShowChat] = useStateRole(true);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => { if (d?.role === "admin") setIsAdmin(true); })
+      .catch(() => {});
+  }, []);
   const [interactionModal, setInteractionModal] = useState<string | null>(null);
   const [controlMode, setControlMode] = useState<'orbit' | 'fps'>('orbit');
   const [avatarPositions, setAvatarPositions] = useState<Map<string, any>>(new Map());
@@ -328,6 +340,22 @@ export default function Office3D() {
           </div>
         </div>
       </div>
+      {/* Chat panel — admin only */}
+      {isAdmin && showChat && (
+        <ChatPanel onClose={() => setShowChat(false)} />
+      )}
+      {isAdmin && !showChat && (
+        <button
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-4 right-4 p-3 rounded-full shadow-lg z-50"
+          style={{ backgroundColor: "#C9A84C" }}
+          title="Abrir chat con HERMES"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 16a2 2 0 01-2 2H7l-4 4V6a2 2 0 012-2h14a2 2 0 012 2v10z" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
